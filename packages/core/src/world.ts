@@ -1,4 +1,4 @@
-import type { EntityId } from './types.js';
+import type { ComponentData, ComponentType, EntityId } from './types.js';
 
 /**
  * Holds every entity, its metadata and its components.
@@ -9,6 +9,8 @@ export class World {
   private readonly live = new Set<EntityId>();
   private readonly names = new Map<EntityId, string>();
   private readonly parents = new Map<EntityId, EntityId | null>();
+  /** componentType -> entityId -> data */
+  private readonly stores = new Map<ComponentType, Map<EntityId, ComponentData>>();
 
   /** Reserves the next id without creating an entity. Used by commands. */
   allocateId(): EntityId {
@@ -40,6 +42,7 @@ export class World {
       this.live.delete(id);
       this.names.delete(id);
       this.parents.delete(id);
+      for (const store of this.stores.values()) store.delete(id);
     }
   }
 
@@ -88,6 +91,42 @@ export class World {
     const out: EntityId[] = [entity];
     for (let i = 0; i < out.length; i++) {
       out.push(...this.children(out[i] as EntityId));
+    }
+    return out;
+  }
+
+  set(entity: EntityId, type: ComponentType, data: ComponentData): void {
+    this.assertAlive(entity);
+    let store = this.stores.get(type);
+    if (!store) {
+      store = new Map<EntityId, ComponentData>();
+      this.stores.set(type, store);
+    }
+    store.set(entity, structuredClone(data));
+  }
+
+  get(entity: EntityId, type: ComponentType): ComponentData | undefined {
+    this.assertAlive(entity);
+    const data = this.stores.get(type)?.get(entity);
+    return data === undefined ? undefined : structuredClone(data);
+  }
+
+  has(entity: EntityId, type: ComponentType): boolean {
+    this.assertAlive(entity);
+    return this.stores.get(type)?.has(entity) ?? false;
+  }
+
+  remove(entity: EntityId, type: ComponentType): void {
+    this.assertAlive(entity);
+    this.stores.get(type)?.delete(entity);
+  }
+
+  componentsOf(entity: EntityId): Record<ComponentType, ComponentData> {
+    this.assertAlive(entity);
+    const out: Record<ComponentType, ComponentData> = {};
+    for (const type of [...this.stores.keys()].sort()) {
+      const data = this.stores.get(type)?.get(entity);
+      if (data !== undefined) out[type] = structuredClone(data);
     }
     return out;
   }
