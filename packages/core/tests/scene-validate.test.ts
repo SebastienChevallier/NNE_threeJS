@@ -130,4 +130,29 @@ describe('validateScene', () => {
       path: 'scene.entities[0].parent', message: 'unknown parent entity null',
     });
   });
+
+  it('accepts a forward-referenced parent declared later in the entities array', () => {
+    const file = {
+      ...good,
+      entities: [
+        { id: 2, name: 'Child', parent: 1, components: {} },
+        { id: 1, name: 'Parent', components: {} },
+      ],
+    };
+    expect(validateScene(file, registry)).toEqual([]);
+  });
+
+  it('rejects a non-object component data as a whole-component error, not a doubled path', () => {
+    const file = { ...good, entities: [{ id: 1, name: 'A', components: { Mesh: 'not-an-object' } }] };
+    expect(validateScene(file, registry)).toContainEqual({
+      path: 'scene.entities[0].components.Mesh', message: 'expected an object',
+    });
+  });
+
+  it('rejects a numeric component data as a whole-component error', () => {
+    const file = { ...good, entities: [{ id: 1, name: 'A', components: { Mesh: 42 } }] };
+    expect(validateScene(file, registry)).toContainEqual({
+      path: 'scene.entities[0].components.Mesh', message: 'expected an object',
+    });
+  });
 });

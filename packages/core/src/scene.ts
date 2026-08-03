@@ -139,7 +139,7 @@ export function validateScene(file: unknown, registry: ComponentRegistry): Valid
 
   // Parents are checked last, once every declared id is known.
   for (const [index, value] of raw.entries()) {
-    if (typeof value !== 'object' || value === null) continue;
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue;
     const entity = value as Record<string, unknown>;
     if (entity.parent === undefined) continue;
     if (typeof entity.parent !== 'number' || !seen.has(entity.parent)) {
