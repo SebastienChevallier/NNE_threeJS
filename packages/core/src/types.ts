@@ -39,3 +39,8 @@ export interface ValidationError {
   path: string;
   message: string;
 }
+
+/** True for a plain JSON-like object: excludes null, arrays, and primitives. */
+export function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}

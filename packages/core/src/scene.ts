@@ -1,5 +1,6 @@
 import { World } from './world.js';
 import type { ComponentData, ComponentType, EntityId, ValidationError } from './types.js';
+import { isPlainRecord } from './types.js';
 import type { ComponentRegistry } from './registry.js';
 
 export const SCENE_VERSION = 1;
@@ -79,7 +80,7 @@ export function stringifyScene(file: SceneFile): string {
  * Returns every problem found; an empty array means the file is safe to load.
  */
 export function validateScene(file: unknown, registry: ComponentRegistry): ValidationError[] {
-  if (typeof file !== 'object' || file === null || Array.isArray(file)) {
+  if (!isPlainRecord(file)) {
     return [{ path: 'scene', message: 'expected an object' }];
   }
   const errors: ValidationError[] = [];
@@ -101,7 +102,7 @@ export function validateScene(file: unknown, registry: ComponentRegistry): Valid
 
   for (const [index, value] of raw.entries()) {
     const base = `scene.entities[${index}]`;
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    if (!isPlainRecord(value)) {
       errors.push({ path: base, message: 'expected an object' });
       continue;
     }
@@ -120,7 +121,7 @@ export function validateScene(file: unknown, registry: ComponentRegistry): Valid
     }
 
     const components = entity.components;
-    if (typeof components !== 'object' || components === null || Array.isArray(components)) {
+    if (!isPlainRecord(components)) {
       errors.push({ path: `${base}.components`, message: 'expected an object' });
       continue;
     }
@@ -138,16 +139,52 @@ export function validateScene(file: unknown, registry: ComponentRegistry): Valid
   }
 
   // Parents are checked last, once every declared id is known.
+  const parentOf = new Map<number, number>();
   for (const [index, value] of raw.entries()) {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue;
-    const entity = value as Record<string, unknown>;
+    if (!isPlainRecord(value)) continue;
+    const entity = value;
     if (entity.parent === undefined) continue;
     if (typeof entity.parent !== 'number' || !seen.has(entity.parent)) {
       errors.push({
         path: `scene.entities[${index}].parent`,
         message: `unknown parent entity ${String(entity.parent)}`,
       });
+    } else if (typeof entity.id === 'number') {
+      parentOf.set(entity.id, entity.parent);
     }
+  }
+
+  // Cycle detection: only over parent links already known to resolve, so a
+  // dangling parent (reported above) never masks a real cycle. One pass per
+  // entity, but each id is walked at most once overall thanks to `resolved` /
+  // `visiting`, keeping the whole check O(n).
+  const resolved = new Set<number>();
+  for (const id of seen) {
+    if (resolved.has(id)) continue;
+    const path: number[] = [];
+    const indexOnPath = new Map<number, number>();
+    let current: number | undefined = id;
+    while (current !== undefined && !resolved.has(current)) {
+      const seenAt = indexOnPath.get(current);
+      if (seenAt !== undefined) {
+        // Only the ids from the first repeat onward form the actual cycle;
+        // earlier ids on the path merely lead into it and are unaffected.
+        for (const cycled of path.slice(seenAt)) {
+          const index = raw.findIndex(
+            (value) => isPlainRecord(value) && value.id === cycled,
+          );
+          errors.push({
+            path: `scene.entities[${index}].parent`,
+            message: 'parent cycle detected',
+          });
+        }
+        break;
+      }
+      indexOnPath.set(current, path.length);
+      path.push(current);
+      current = parentOf.get(current);
+    }
+    for (const done of path) resolved.add(done);
   }
 
   return errors;

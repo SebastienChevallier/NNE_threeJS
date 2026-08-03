@@ -6,6 +6,7 @@ import type {
   FieldType,
   ValidationError,
 } from './types.js';
+import { isPlainRecord } from './types.js';
 
 /** The only field types the engine and the Inspector understand. */
 export const FIELD_TYPES: readonly FieldType[] = [
@@ -80,7 +81,7 @@ export class ComponentRegistry {
   validate(type: ComponentType, data: unknown): ValidationError[] {
     const schema = this.schemas.get(type);
     if (!schema) return [{ path: type, message: 'unknown component type' }];
-    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    if (!isPlainRecord(data)) {
       return [{ path: type, message: 'expected an object' }];
     }
 

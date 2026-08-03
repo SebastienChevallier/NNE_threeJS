@@ -229,6 +229,16 @@ describe('CommandBus', () => {
     expect(bus.canUndo()).toBe(false);
   });
 
+  it('does not alias the caller-supplied data object: mutating it after dispatch must not corrupt undo/redo history', () => {
+    const e = world.spawn();
+    const data = { position: [1, 2, 3] };
+    bus.dispatch({ kind: 'SetComponent', entity: e, type: 'Transform', data });
+    data.position[0] = 99; // caller mutates its own object after dispatch
+    bus.undo();
+    bus.redo();
+    expect(world.get(e, 'Transform')).toEqual({ position: [1, 2, 3] });
+  });
+
   it('notifies subscribers with the full restoration batch when undoing a despawn-with-children', () => {
     const a = world.spawn('A');
     const b = world.spawn('B', a);

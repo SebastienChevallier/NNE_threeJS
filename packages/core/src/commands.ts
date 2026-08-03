@@ -115,7 +115,11 @@ export class CommandBus {
   dispatch(command: Command): void {
     const undo = invertCommand(this.world, command);
     applyCommand(this.world, command);
-    this.undoStack.push({ redo: [command], undo });
+    // Commands are plain JSON (see the `Command` docstring): clone before
+    // stacking so the caller mutating its own object afterwards cannot
+    // corrupt the history. `command` itself is still what gets applied and
+    // notified above, and `undo` was computed from world state before that.
+    this.undoStack.push({ redo: [structuredClone(command)], undo });
     this.redoStack.length = 0;
     this.notify([command]);
   }

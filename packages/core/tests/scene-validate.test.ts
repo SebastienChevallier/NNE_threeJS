@@ -155,4 +155,64 @@ describe('validateScene', () => {
       path: 'scene.entities[0].components.Mesh', message: 'expected an object',
     });
   });
+
+  // --- Parent cycle detection ---
+
+  it('rejects a two-entity parent cycle, one error per entity on the cycle', () => {
+    const file = {
+      ...good,
+      entities: [
+        { id: 1, name: 'A', parent: 2, components: {} },
+        { id: 2, name: 'B', parent: 1, components: {} },
+      ],
+    };
+    const result = validateScene(file, registry);
+    expect(result).toContainEqual({
+      path: 'scene.entities[0].parent', message: 'parent cycle detected',
+    });
+    expect(result).toContainEqual({
+      path: 'scene.entities[1].parent', message: 'parent cycle detected',
+    });
+  });
+
+  it('rejects a self-parented entity as a cycle', () => {
+    const file = { ...good, entities: [{ id: 1, name: 'A', parent: 1, components: {} }] };
+    expect(validateScene(file, registry)).toContainEqual({
+      path: 'scene.entities[0].parent', message: 'parent cycle detected',
+    });
+  });
+
+  it('rejects a three-entity parent cycle, one error per entity on the cycle', () => {
+    const file = {
+      ...good,
+      entities: [
+        { id: 1, name: 'A', parent: 2, components: {} },
+        { id: 2, name: 'B', parent: 3, components: {} },
+        { id: 3, name: 'C', parent: 1, components: {} },
+      ],
+    };
+    const result = validateScene(file, registry);
+    expect(result).toContainEqual({
+      path: 'scene.entities[0].parent', message: 'parent cycle detected',
+    });
+    expect(result).toContainEqual({
+      path: 'scene.entities[1].parent', message: 'parent cycle detected',
+    });
+    expect(result).toContainEqual({
+      path: 'scene.entities[2].parent', message: 'parent cycle detected',
+    });
+  });
+
+  it('accepts a deep but acyclic parent chain (four levels) with no cycle error', () => {
+    const file = {
+      ...good,
+      entities: [
+        { id: 1, name: 'Root', components: {} },
+        { id: 2, name: 'Child', parent: 1, components: {} },
+        { id: 3, name: 'Grandchild', parent: 2, components: {} },
+        { id: 4, name: 'GreatGrandchild', parent: 3, components: {} },
+      ],
+    };
+    expect(validateScene(file, registry)).toEqual([]);
+  });
 });
