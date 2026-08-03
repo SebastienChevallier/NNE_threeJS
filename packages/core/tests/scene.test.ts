@@ -83,4 +83,35 @@ describe('scene serialization', () => {
     expect(text).toContain('\n  "version": 1');
     expect(text.endsWith('\n')).toBe(true);
   });
+
+  it('normalizes component key order and entity id order from a hand-built file', () => {
+    // Built directly as an object literal (NOT via World/serializeScene) so this
+    // actually exercises stringifyScene's own normalization, not componentsOf's.
+    const file: ReturnType<typeof serializeScene> = {
+      version: SCENE_VERSION,
+      name: 'HandEdited',
+      entities: [
+        {
+          id: 2,
+          name: 'Second',
+          components: {
+            Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+            Camera: { fov: 60, near: 0.1, far: 1000, active: true },
+            Mesh: { asset: 'assets/foo.glb', castShadow: false },
+          },
+        },
+        {
+          id: 1,
+          name: 'First',
+          components: {},
+        },
+      ],
+    };
+    const text = stringifyScene(file);
+    // Entity ids must come out ascending even though the input was descending.
+    expect(text.indexOf('"First"')).toBeLessThan(text.indexOf('"Second"'));
+    // Component keys must come out alphabetically even though the input was not.
+    expect(text.indexOf('"Camera"')).toBeLessThan(text.indexOf('"Mesh"'));
+    expect(text.indexOf('"Mesh"')).toBeLessThan(text.indexOf('"Transform"'));
+  });
 });
