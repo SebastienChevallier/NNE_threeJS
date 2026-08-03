@@ -26,9 +26,16 @@ export function createMeshSystem(graph: SceneGraph, assets: AssetCache): System 
         // The entity may have been despawned, or pointed at another asset,
         // while the load was in flight.
         if (!world.alive(entity) || resolved.get(entity) !== url) return;
-        object.castShadow = data.castShadow;
-        object.traverse((child) => { child.castShadow = data.castShadow; });
+        // Re-peek the current component: castShadow may have changed while
+        // the load was in flight (same url, so the guard above didn't catch it).
+        const current = world.peek(entity, MESH) as unknown as MeshData;
+        object.traverse((child) => { child.castShadow = current.castShadow; });
         graph.attach(entity, object);
+      }).catch((error) => {
+        // Only roll back if this load is still the one "in flight" for the
+        // entity; a newer load may have already superseded it.
+        if (resolved.get(entity) === url) resolved.delete(entity);
+        console.error(`mesh-system: failed to load asset "${url}" for entity ${entity}`, error);
       });
     }
 

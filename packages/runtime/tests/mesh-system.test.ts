@@ -8,6 +8,7 @@ import { createMeshSystem } from '../src/systems/mesh-system.js';
 /** Resolves loads only when we say so, to test the async seam deterministically. */
 function controllableSource() {
   const resolvers: (() => void)[] = [];
+  const rejecters: (() => void)[] = [];
   let calls = 0;
   return {
     get calls() { return calls; },
@@ -19,9 +20,21 @@ function controllableSource() {
       // every pending microtask first.
       await new Promise((resolve) => setTimeout(resolve, 0));
     },
+    /** Rejects all pending loads instead of resolving them. */
+    reject: async () => {
+      for (const r of rejecters.splice(0)) r();
+      resolvers.splice(0);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    },
     async load(_url: string) {
       calls++;
-      await new Promise<void>((resolve) => resolvers.push(resolve));
+      let rejectFn!: () => void;
+      const rejectPromise = new Promise<void>((_resolve, reject) => {
+        rejectFn = () => reject(new Error('load failed'));
+      });
+      rejecters.push(rejectFn);
+      const resolvePromise = new Promise<void>((resolve) => resolvers.push(resolve));
+      await Promise.race([resolvePromise, rejectPromise]);
       return new Mesh() as Object3D;
     },
   };
@@ -105,6 +118,34 @@ describe('mesh system', () => {
     graph.sync(world);
     await source.flush();
     expect(graph.objectOf(e)).toBeUndefined();
+  });
+
+  it('applies the current castShadow, not the stale one captured when the load started', async () => {
+    const e = world.spawn('A');
+    world.set(e, MESH, { asset: 'a.glb', castShadow: true });
+    graph.sync(world);
+    system(world, 0.016);
+    // Same asset url, but castShadow changes while the load is still in flight.
+    world.set(e, MESH, { asset: 'a.glb', castShadow: false });
+    system(world, 0.016);
+    await source.flush();
+    expect(graph.objectOf(e)?.castShadow).toBe(false);
+  });
+
+  it('clears the resolved entry on load failure so a retry can happen', async () => {
+    const e = world.spawn('A');
+    world.set(e, MESH, { asset: 'a.glb', castShadow: true });
+    graph.sync(world);
+    system(world, 0.016);
+    await source.reject();
+
+    // Same url as before: if `resolved` wasn't rolled back, this tick would
+    // be silently ignored by the guard and no new load would be requested.
+    system(world, 0.016);
+    expect(source.calls).toBe(2);
+
+    await source.flush();
+    expect(graph.objectOf(e)).toBeInstanceOf(Mesh);
   });
 
   it('keeps child entities attached when the asset replaces the placeholder', async () => {
