@@ -85,6 +85,22 @@ describe('referencedAssets', () => {
     expect(referencedAssets([scene], registry())).toEqual([]);
   });
 
+  it('survives a hand-edited scene whose component data is not an object', () => {
+    // `build` reads scenes straight off disk without revalidating them, and a
+    // project folder is edited by hand and by git merges. A null component
+    // must yield no asset, not a TypeError that takes the build down.
+    const scene = {
+      version: 1,
+      name: 'S',
+      entities: [
+        { id: 1, name: 'X', components: { Mesh: null } },
+        { id: 2, name: 'Y', components: { Mesh: 'not an object' } },
+        { id: 3, name: 'Z', components: { Mesh: { asset: 'ok.glb', castShadow: true } } },
+      ],
+    } as unknown as SceneFile;
+    expect(referencedAssets([scene], registry())).toEqual(['ok.glb']);
+  });
+
   it('returns a sorted list, so a build is reproducible', () => {
     expect(referencedAssets([sceneWith(['b.glb', 'a.glb'])], registry()))
       .toEqual(['a.glb', 'b.glb']);

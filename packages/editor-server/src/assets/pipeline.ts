@@ -24,11 +24,40 @@ function isMissing(error: unknown): boolean {
  */
 export class AssetPipeline {
   private manifest: Map<string, AssetEntry> | undefined;
+  /** Tail of the pending work chain per asset path. See `serialize`. */
+  private readonly chains = new Map<string, Promise<void>>();
 
   constructor(
     private readonly paths: ProjectPaths,
     private readonly optimizer: AssetOptimizer,
   ) {}
+
+  /**
+   * Runs `work` after anything already queued for the same asset path.
+   *
+   * Two optimizations of one asset would write the same cache file at the same
+   * time, and the writer is not atomic — the result is a truncated .glb and a
+   * manifest entry pairing one run's mtime with another's bytes. The hot-reload
+   * path makes this ordinary rather than exotic: Blender re-saving while an
+   * optimization is still running is exactly the case the watcher exists for.
+   *
+   * The lock is per path, so unrelated assets still optimize in parallel and a
+   * first scan is not serialized into a crawl.
+   */
+  private serialize<T>(path: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.chains.get(path) ?? Promise.resolve();
+    // `previous` is a tail that never rejects, so a failed import does not
+    // poison the ones queued behind it.
+    const run = previous.then(work);
+    const tail = run.then(() => undefined, () => undefined);
+    this.chains.set(path, tail);
+    void tail.then(() => {
+      // Only the last link clears the entry, so the map does not grow forever
+      // while still keeping a chain alive as long as work is queued on it.
+      if (this.chains.get(path) === tail) this.chains.delete(path);
+    });
+    return run;
+  }
 
   async entries(): Promise<AssetEntry[]> {
     const manifest = await this.load();
@@ -40,8 +69,12 @@ export class AssetPipeline {
   }
 
   /** Optimizes one asset and records it, replacing any previous entry. */
-  async importAsset(relPath: string): Promise<AssetEntry> {
+  importAsset(relPath: string): Promise<AssetEntry> {
     const path = toPosix(relPath);
+    return this.serialize(path, () => this.runImport(path));
+  }
+
+  private async runImport(path: string): Promise<AssetEntry> {
     const problems = validateAssetPath(path);
     if (problems.length > 0) {
       throw new HttpError(
@@ -84,8 +117,14 @@ export class AssetPipeline {
     return entry;
   }
 
-  async removeAsset(relPath: string): Promise<void> {
+  removeAsset(relPath: string): Promise<void> {
     const path = toPosix(relPath);
+    // Queued on the same chain as imports: deleting a cache file out from
+    // under an optimization that is still writing it is the same race.
+    return this.serialize(path, () => this.runRemove(path));
+  }
+
+  private async runRemove(path: string): Promise<void> {
     const manifest = await this.load();
     const entry = manifest.get(path);
     if (!entry) return;
@@ -129,8 +168,15 @@ export class AssetPipeline {
     return this.entries();
   }
 
-  async setThumbnail(relPath: string, image: Uint8Array): Promise<AssetEntry> {
+  setThumbnail(relPath: string, image: Uint8Array): Promise<AssetEntry> {
     const path = toPosix(relPath);
+    // Also on the chain: an import reads the existing thumbnail to carry it
+    // over, so a thumbnail landing between that read and the write would be
+    // dropped on the floor.
+    return this.serialize(path, () => this.runSetThumbnail(path, image));
+  }
+
+  private async runSetThumbnail(path: string, image: Uint8Array): Promise<AssetEntry> {
     const manifest = await this.load();
     const entry = manifest.get(path);
     if (!entry) throw new HttpError(404, `no asset at "${path}"`);

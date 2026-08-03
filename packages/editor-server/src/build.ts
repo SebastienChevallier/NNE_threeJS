@@ -52,6 +52,10 @@ export function referencedAssets(scenes: SceneFile[], registry: ComponentRegistr
   for (const scene of scenes) {
     for (const entity of scene.entities) {
       for (const [type, data] of Object.entries(entity.components)) {
+        // Scenes are read straight off disk here, without revalidation: a
+        // project folder is hand-edited and merged by git, so a component that
+        // is null or a bare string has to yield nothing rather than throw.
+        if (typeof data !== 'object' || data === null) continue;
         for (const field of assetFields.get(type) ?? []) {
           const value = (data as Record<string, unknown>)[field];
           // null is the normal "no asset yet" value; anything non-string is a

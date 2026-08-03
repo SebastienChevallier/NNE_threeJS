@@ -206,6 +206,93 @@ describe('AssetPipeline', () => {
     });
   });
 
+  describe('concurrency', () => {
+    /** Counts how many optimizations overlap, which is the corrupting case. */
+    function countingOptimizer(delayMs: number) {
+      let active = 0;
+      let maxActive = 0;
+      const optimizer: AssetOptimizer = {
+        async run({ target }) {
+          active++;
+          maxActive = Math.max(maxActive, active);
+          await new Promise((r) => setTimeout(r, delayMs));
+          await mkdir(join(target, '..'), { recursive: true });
+          await writeFile(target, 'optimized');
+          active--;
+          return metadata;
+        },
+      };
+      return { optimizer, max: () => maxActive };
+    }
+
+    it('never optimizes the same asset twice at once', async () => {
+      // The hot-reload path makes this ordinary: Blender re-saving during a
+      // long optimization starts a second one for the same file, and both
+      // would write the same cache path. NodeIO.write is not atomic.
+      await writeAsset('props/PRP_Chair_01.glb');
+      const counting = countingOptimizer(50);
+      const p = new AssetPipeline(resolveProject(dir), counting.optimizer);
+
+      await Promise.all([
+        p.importAsset('props/PRP_Chair_01.glb'),
+        p.importAsset('props/PRP_Chair_01.glb'),
+      ]);
+      expect(counting.max()).toBe(1);
+    });
+
+    it('still optimizes different assets in parallel', async () => {
+      // Serializing everything would make a first scan needlessly slow; the
+      // lock is per path, not global.
+      await writeAsset('props/PRP_Chair_01.glb');
+      await writeAsset('props/PRP_Table_01.glb');
+      const counting = countingOptimizer(50);
+      const p = new AssetPipeline(resolveProject(dir), counting.optimizer);
+
+      await Promise.all([
+        p.importAsset('props/PRP_Chair_01.glb'),
+        p.importAsset('props/PRP_Table_01.glb'),
+      ]);
+      expect(counting.max()).toBe(2);
+    });
+
+    it('runs a queued import even when the one before it failed', async () => {
+      await writeAsset('props/PRP_Chair_01.glb');
+      let first = true;
+      const flaky: AssetOptimizer = {
+        async run(request) {
+          if (first) {
+            first = false;
+            throw new Error('boom');
+          }
+          return fake.optimizer.run(request);
+        },
+      };
+      const p = new AssetPipeline(resolveProject(dir), flaky);
+
+      const [failed, succeeded] = await Promise.allSettled([
+        p.importAsset('props/PRP_Chair_01.glb'),
+        p.importAsset('props/PRP_Chair_01.glb'),
+      ]);
+      expect(failed?.status).toBe('rejected');
+      expect(succeeded?.status).toBe('fulfilled');
+    });
+
+    it('does not delete a cached file while an import is writing it', async () => {
+      await writeAsset('props/PRP_Chair_01.glb');
+      const counting = countingOptimizer(50);
+      const p = new AssetPipeline(resolveProject(dir), counting.optimizer);
+
+      const importing = p.importAsset('props/PRP_Chair_01.glb');
+      const removing = p.removeAsset('props/PRP_Chair_01.glb');
+      await Promise.all([importing, removing]);
+
+      // The remove ran after the import, so it wins: no entry, no cached file.
+      expect(await p.entries()).toEqual([]);
+      await expect(readFile(join(dir, '.cache', 'assets/props/PRP_Chair_01.glb')))
+        .rejects.toThrow();
+    });
+  });
+
   describe('removeAsset', () => {
     it('drops the entry and the cached file', async () => {
       await writeAsset('props/PRP_Chair_01.glb');
