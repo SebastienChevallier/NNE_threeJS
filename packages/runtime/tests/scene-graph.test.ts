@@ -120,6 +120,26 @@ describe('SceneGraph', () => {
     expect(root.children).toHaveLength(0);
   });
 
+  it('detach reparents the children instead of stranding them', () => {
+    const parent = world.spawn('P');
+    const child = world.spawn('C', parent);
+    graph.sync(world);
+    const childObject = graph.objectOf(child) as Object3D;
+    graph.detach(parent);
+    expect(graph.objectOf(child)).toBe(childObject);
+    expect(childObject.parent).toBe(root);
+  });
+
+  it('detach keeps children in the tree and sync restores the hierarchy', () => {
+    const parent = world.spawn('P');
+    const child = world.spawn('C', parent);
+    graph.sync(world);
+    const childObject = graph.objectOf(child) as Object3D;
+    graph.detach(parent);
+    graph.sync(world);
+    expect(childObject.parent).toBe(graph.objectOf(parent));
+  });
+
   it('lists tracked entities ascending', () => {
     const a = world.spawn('A');
     const b = world.spawn('B');

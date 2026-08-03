@@ -40,6 +40,13 @@ export class SceneGraph {
   detach(entity: EntityId): void {
     const object = this.objects.get(entity);
     if (!object) return;
+    // Lift the children one level up before leaving, rather than dragging the
+    // whole subtree out of the scene. A system may detach mid-frame (a Light or
+    // Camera component being removed), and the render happens before the next
+    // `sync` could repair the tree: without this the children blink out for a
+    // frame. `sync` reparents them onto the entity's real parent next pass.
+    const parent = object.parent ?? this.root;
+    for (const child of [...object.children]) parent.add(child);
     object.removeFromParent();
     this.objects.delete(entity);
   }
