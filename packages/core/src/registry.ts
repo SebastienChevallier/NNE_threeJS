@@ -2,7 +2,9 @@ import type {
   ComponentData,
   ComponentSchema,
   ComponentType,
+  FieldSpec,
   FieldType,
+  ValidationError,
 } from './types.js';
 
 /** The only field types the engine and the Inspector understand. */
@@ -72,5 +74,74 @@ export class ComponentRegistry {
       out[field] = structuredClone(spec.default);
     }
     return out;
+  }
+
+  /** Returns every problem found in `data`. An empty array means valid. */
+  validate(type: ComponentType, data: unknown): ValidationError[] {
+    const schema = this.schemas.get(type);
+    if (!schema) return [{ path: type, message: 'unknown component type' }];
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+      return [{ path: type, message: 'expected an object' }];
+    }
+
+    const errors: ValidationError[] = [];
+    const record = data as Record<string, unknown>;
+
+    for (const [field, spec] of Object.entries(schema)) {
+      const path = `${type}.${field}`;
+      if (!(field in record)) {
+        errors.push({ path, message: 'missing field' });
+        continue;
+      }
+      const message = checkField(spec, record[field]);
+      if (message) errors.push({ path, message });
+    }
+    for (const field of Object.keys(record)) {
+      if (!(field in schema)) {
+        errors.push({ path: `${type}.${field}`, message: 'unknown field' });
+      }
+    }
+    return errors;
+  }
+}
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+function isTriple(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every((n) => typeof n === 'number' && Number.isFinite(n))
+  );
+}
+
+/** Returns an error message, or null when the value fits the spec. */
+function checkField(spec: FieldSpec, value: unknown): string | null {
+  switch (spec.type) {
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value)
+        ? null : 'expected a finite number';
+    case 'int':
+      return typeof value === 'number' && Number.isInteger(value)
+        ? null : 'expected an integer';
+    case 'bool':
+      return typeof value === 'boolean' ? null : 'expected a boolean';
+    case 'string':
+      return typeof value === 'string' ? null : 'expected a string';
+    case 'vec3':
+    case 'euler':
+      return isTriple(value) ? null : 'expected an array of 3 finite numbers';
+    case 'color':
+      return typeof value === 'string' && HEX_COLOR.test(value)
+        ? null : 'expected a hex color such as #ff0000';
+    case 'enum':
+      return (spec.options ?? []).includes(value as string)
+        ? null : `expected one of: ${(spec.options ?? []).join(', ')}`;
+    case 'asset':
+      return value === null || typeof value === 'string'
+        ? null : 'expected an asset path or null';
+    case 'entity':
+      return value === null || (typeof value === 'number' && Number.isInteger(value))
+        ? null : 'expected an entity id or null';
   }
 }
