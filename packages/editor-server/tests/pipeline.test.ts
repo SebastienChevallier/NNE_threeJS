@@ -131,11 +131,15 @@ describe('AssetPipeline', () => {
 
       await writeAsset('props/PRP_Chair_01.glb', 'source');
       await utimes(file, stamp, stamp);
+      const stamped = (await stat(file)).mtimeMs;
       await pipeline.scanAll();
 
       await writeAsset('props/PRP_Chair_01.glb', 'a different, longer source');
       await utimes(file, stamp, stamp);
-      expect((await stat(file)).mtimeMs).toBe(stamp.getTime());
+      // Compared against what the filesystem actually stored the first time,
+      // not against stamp.getTime(): the stored value can land a fraction of a
+      // millisecond off, and asserting the ideal makes the test flaky.
+      expect((await stat(file)).mtimeMs).toBe(stamped);
 
       await pipeline.scanAll();
       expect(fake.calls).toHaveLength(2);
