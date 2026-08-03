@@ -54,6 +54,30 @@ export class World {
     return [...this.live].sort((a, b) => a - b);
   }
 
+  /**
+   * Entities holding every requested component, sorted ascending.
+   * Starts from the smallest store so the intersection stays cheap.
+   */
+  query(...types: ComponentType[]): EntityId[] {
+    if (types.length === 0) return this.entities();
+
+    const stores: Map<EntityId, ComponentData>[] = [];
+    for (const type of types) {
+      const store = this.stores.get(type);
+      if (!store || store.size === 0) return [];
+      stores.push(store);
+    }
+    stores.sort((a, b) => a.size - b.size);
+
+    const [smallest, ...rest] = stores as [Map<EntityId, ComponentData>, ...Map<EntityId, ComponentData>[]];
+    const out: EntityId[] = [];
+    for (const id of smallest.keys()) {
+      if (!this.live.has(id)) continue;
+      if (rest.every((store) => store.has(id))) out.push(id);
+    }
+    return out.sort((a, b) => a - b);
+  }
+
   getName(entity: EntityId): string {
     this.assertAlive(entity);
     return this.names.get(entity) as string;
