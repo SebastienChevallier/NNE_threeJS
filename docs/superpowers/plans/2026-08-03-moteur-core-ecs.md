@@ -2402,7 +2402,18 @@ describe('command inversion', () => {
     const before = snapshot(world);
     const bus = new CommandBus(world);
 
-    for (const { command } of cases) bus.dispatch(command(world));
+    // Hand-ordered so every command stays valid against the previous one:
+    // nothing targets an entity a prior despawn removed.
+    const spawned = world.allocateId();
+    bus.dispatch({ kind: 'SpawnEntity', entity: spawned, name: 'New', parent: 1 });
+    bus.dispatch({ kind: 'RenameEntity', entity: 2, name: 'Renamed' });
+    bus.dispatch({ kind: 'SetComponent', entity: 2, type: 'Mesh', data: { asset: 'x.glb', castShadow: false } });
+    bus.dispatch({ kind: 'AddComponent', entity: 4, type: 'Mesh', data: { asset: null, castShadow: true } });
+    bus.dispatch({ kind: 'SetParent', entity: 3, parent: 4 });
+    bus.dispatch({ kind: 'RemoveComponent', entity: 2, type: 'Mesh' });
+    bus.dispatch({ kind: 'DespawnEntity', entity: 4 });
+    bus.dispatch({ kind: 'SetParent', entity: 2, parent: null });
+
     while (bus.canUndo()) bus.undo();
 
     expect(snapshot(world)).toBe(before);
