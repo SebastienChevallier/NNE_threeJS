@@ -15,6 +15,8 @@ import type { EntityView } from './types.js';
 export class EditorSession {
   readonly registry = new ComponentRegistry();
   world = new World();
+  /** Name of the scene currently open, as the file called it. */
+  sceneName = '';
 
   private bus = new CommandBus(this.world);
   private readonly listeners = new Set<() => void>();
@@ -28,6 +30,7 @@ export class EditorSession {
 
   loadScene(file: SceneFile): void {
     this.world = deserializeScene(file);
+    this.sceneName = file.name;
     // A fresh bus, because the old history describes a world that is gone:
     // undoing into it would edit entities the new scene never had.
     this.bus = new CommandBus(this.world);
