@@ -108,7 +108,7 @@ interface HistoryEntry {
 export class CommandBus {
   private readonly undoStack: HistoryEntry[] = [];
   private readonly redoStack: HistoryEntry[] = [];
-  private readonly listeners = new Set<(command: Command) => void>();
+  private readonly listeners = new Set<(commands: Command[]) => void>();
 
   constructor(private readonly world: World) {}
 
@@ -117,36 +117,46 @@ export class CommandBus {
     applyCommand(this.world, command);
     this.undoStack.push({ redo: [command], undo });
     this.redoStack.length = 0;
-    this.notify(command);
+    this.notify([command]);
   }
 
+  /**
+   * Applies the batch before touching either stack. If a command in the
+   * batch throws, the entry is neither popped nor pushed, so the stacks stay
+   * exactly as they were before the call — the entry is not lost. The world
+   * itself may be left partially modified by the commands that succeeded
+   * before the throw; rolling that back is out of scope here.
+   */
   undo(): boolean {
-    const entry = this.undoStack.pop();
+    const entry = this.undoStack.at(-1);
     if (!entry) return false;
     for (const command of entry.undo) applyCommand(this.world, command);
+    this.undoStack.pop();
     this.redoStack.push(entry);
-    this.notify(entry.undo[0] ?? (entry.redo[0] as Command));
+    this.notify(entry.undo.length > 0 ? entry.undo : entry.redo);
     return true;
   }
 
+  /** Same atomicity guarantee as `undo`: applied before the stacks move. */
   redo(): boolean {
-    const entry = this.redoStack.pop();
+    const entry = this.redoStack.at(-1);
     if (!entry) return false;
     for (const command of entry.redo) applyCommand(this.world, command);
+    this.redoStack.pop();
     this.undoStack.push(entry);
-    this.notify(entry.redo[0] as Command);
+    this.notify(entry.redo);
     return true;
   }
 
   canUndo(): boolean { return this.undoStack.length > 0; }
   canRedo(): boolean { return this.redoStack.length > 0; }
 
-  subscribe(listener: (command: Command) => void): () => void {
+  subscribe(listener: (commands: Command[]) => void): () => void {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
   }
 
-  private notify(command: Command): void {
-    for (const listener of this.listeners) listener(command);
+  private notify(commands: Command[]): void {
+    for (const listener of this.listeners) listener(commands);
   }
 }

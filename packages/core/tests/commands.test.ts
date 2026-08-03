@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { World } from '../src/world.js';
-import { CommandBus } from '../src/commands.js';
+import { CommandBus, type Command } from '../src/commands.js';
 
 describe('CommandBus', () => {
   let world: World;
@@ -192,5 +192,58 @@ describe('CommandBus', () => {
     expect(bus.redo()).toBe(true);
     expect(world.alive(a)).toBe(false);
     expect(world.alive(b)).toBe(false);
+    expect(bus.canUndo()).toBe(true);
+    expect(bus.canRedo()).toBe(false);
+    // Undo once more: the whole subtree must come back exactly as before.
+    expect(bus.undo()).toBe(true);
+    expect(world.alive(a)).toBe(true);
+    expect(world.alive(b)).toBe(true);
+    expect(world.getName(a)).toBe('A');
+    expect(world.getName(b)).toBe('B');
+    expect(world.getParent(b)).toBe(a);
+    expect(world.get(b, 'Mesh')).toEqual({ asset: 'a.glb' });
+  });
+
+  it('does not lose the undo entry if a mid-batch command throws during undo()', () => {
+    const a = world.spawn('A');
+    const b = world.spawn('B', a);
+    world.set(b, 'Mesh', { asset: 'a.glb' });
+    bus.dispatch({ kind: 'DespawnEntity', entity: a });
+    // Recreate b's id directly through the world (bypassing the bus), so the
+    // replayed SpawnEntity(b) inside the undo batch collides and throws.
+    world.spawnWithId(b, 'Ghost', null);
+    expect(() => bus.undo()).toThrow();
+    expect(bus.canUndo()).toBe(true);
+    expect(bus.canRedo()).toBe(false);
+  });
+
+  it('does not lose the redo entry if a mid-batch command throws during redo()', () => {
+    const id = world.allocateId();
+    bus.dispatch({ kind: 'SpawnEntity', entity: id, name: 'A', parent: null });
+    bus.undo();
+    // Recreate the same id directly through the world (bypassing the bus),
+    // so the replayed SpawnEntity inside the redo batch collides and throws.
+    world.spawnWithId(id, 'Ghost', null);
+    expect(() => bus.redo()).toThrow();
+    expect(bus.canRedo()).toBe(true);
+    expect(bus.canUndo()).toBe(false);
+  });
+
+  it('notifies subscribers with the full restoration batch when undoing a despawn-with-children', () => {
+    const a = world.spawn('A');
+    const b = world.spawn('B', a);
+    world.set(b, 'Mesh', { asset: 'a.glb' });
+    bus.dispatch({ kind: 'DespawnEntity', entity: a });
+    const listener = vi.fn();
+    bus.subscribe(listener);
+    bus.undo();
+    expect(listener).toHaveBeenCalledTimes(1);
+    const commands = listener.mock.calls[0]?.[0] as Command[];
+    expect(commands).toHaveLength(3);
+    expect(commands.some((c) => c.kind === 'SpawnEntity' && c.entity === a)).toBe(true);
+    expect(commands.some((c) => c.kind === 'SpawnEntity' && c.entity === b)).toBe(true);
+    expect(
+      commands.some((c) => c.kind === 'SetComponent' && c.entity === b && c.type === 'Mesh'),
+    ).toBe(true);
   });
 });
