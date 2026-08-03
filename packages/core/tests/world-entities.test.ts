@@ -73,4 +73,22 @@ describe('World entity lifecycle', () => {
   it('ignores despawning a dead entity', () => {
     expect(() => world.despawn(99)).not.toThrow();
   });
+
+  it('returns sorted ascending when insertion order differs', () => {
+    world.spawnWithId(5, 'E', null);
+    world.spawnWithId(2, 'B', null);
+    world.spawnWithId(8, 'H', null);
+    world.spawnWithId(1, 'A', null);
+    expect(world.entities()).toEqual([1, 2, 5, 8]);
+  });
+
+  it('spawnWithId with id below counter does not advance counter', () => {
+    world.allocateId();
+    world.allocateId();
+    world.allocateId();
+    const beforeCounter = world.spawn(); // counter was at 4, now at 5
+    world.despawn(beforeCounter);
+    world.spawnWithId(2, 'Two', null);
+    expect(world.spawn()).toBe(5);
+  });
 });
