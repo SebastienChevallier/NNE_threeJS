@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    // The runtime is the browser-facing package: it needs requestAnimationFrame
+    // and, from the viewport on, a canvas. Core stays DOM-free on purpose.
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}
