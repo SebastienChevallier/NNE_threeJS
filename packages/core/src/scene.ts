@@ -140,9 +140,13 @@ export function validateScene(file: unknown, registry: ComponentRegistry): Valid
 
   // Parents are checked last, once every declared id is known.
   const parentOf = new Map<number, number>();
+  const indexOfId = new Map<number, number>();
   for (const [index, value] of raw.entries()) {
     if (!isPlainRecord(value)) continue;
     const entity = value;
+    if (typeof entity.id === 'number') {
+      indexOfId.set(entity.id, index);
+    }
     if (entity.parent === undefined) continue;
     if (typeof entity.parent !== 'number' || !seen.has(entity.parent)) {
       errors.push({
@@ -157,7 +161,9 @@ export function validateScene(file: unknown, registry: ComponentRegistry): Valid
   // Cycle detection: only over parent links already known to resolve, so a
   // dangling parent (reported above) never masks a real cycle. One pass per
   // entity, but each id is walked at most once overall thanks to `resolved` /
-  // `visiting`, keeping the whole check O(n).
+  // `visiting`, and the index used for reporting is a map lookup (built
+  // above alongside `parentOf`) rather than a re-scan of `raw`, keeping the
+  // whole check O(n).
   const resolved = new Set<number>();
   for (const id of seen) {
     if (resolved.has(id)) continue;
@@ -170,9 +176,7 @@ export function validateScene(file: unknown, registry: ComponentRegistry): Valid
         // Only the ids from the first repeat onward form the actual cycle;
         // earlier ids on the path merely lead into it and are unaffected.
         for (const cycled of path.slice(seenAt)) {
-          const index = raw.findIndex(
-            (value) => isPlainRecord(value) && value.id === cycled,
-          );
+          const index = indexOfId.get(cycled);
           errors.push({
             path: `scene.entities[${index}].parent`,
             message: 'parent cycle detected',
