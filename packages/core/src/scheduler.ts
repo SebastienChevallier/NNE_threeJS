@@ -24,7 +24,7 @@ export class Scheduler {
   }
 
   run(world: World, dt: number): void {
-    for (const entry of this.systems) {
+    for (const entry of [...this.systems]) {
       try {
         entry.run(world, dt);
       } catch (cause) {

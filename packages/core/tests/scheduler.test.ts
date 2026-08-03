@@ -67,12 +67,12 @@ describe('Scheduler', () => {
 
   it('removing a system does not disturb the relative order of the remaining ones', () => {
     const calls: string[] = [];
-    scheduler.add('first', () => calls.push('first'));
-    scheduler.add('second', () => calls.push('second'));
-    scheduler.add('third', () => calls.push('third'));
-    scheduler.remove('second');
+    scheduler.add('zulu', () => calls.push('zulu'));
+    scheduler.add('alpha', () => calls.push('alpha'));
+    scheduler.add('mike', () => calls.push('mike'));
+    scheduler.remove('alpha');
     scheduler.run(world, 0.016);
-    expect(calls).toEqual(['first', 'third']);
+    expect(calls).toEqual(['zulu', 'mike']);
   });
 
   it('the cause of the rethrown error is the original error object', () => {
@@ -93,5 +93,59 @@ describe('Scheduler', () => {
   it('a system that throws a non-Error value still produces a readable message', () => {
     scheduler.add('broken', () => { throw 'string error'; });
     expect(() => scheduler.run(world, 0)).toThrow(/system "broken" failed: string error/);
+  });
+
+  it('a system that calls scheduler.remove on a later system during run: the later system still runs this frame', () => {
+    const calls: string[] = [];
+    scheduler.add('first', () => {
+      calls.push('first');
+      scheduler.remove('second');
+    });
+    scheduler.add('second', () => calls.push('second'));
+    scheduler.run(world, 0.016);
+    // 'second' should still run in this frame despite being removed by 'first'
+    expect(calls).toEqual(['first', 'second']);
+  });
+
+  it('a system removed during run does NOT run on the following frame', () => {
+    const calls: string[] = [];
+    scheduler.add('first', () => {
+      calls.push('first');
+      scheduler.remove('second');
+    });
+    scheduler.add('second', () => calls.push('second'));
+    scheduler.run(world, 0.016);
+    calls.length = 0; // Reset for next frame
+    scheduler.run(world, 0.016);
+    // 'second' should not run in the second frame
+    expect(calls).toEqual(['first']);
+  });
+
+  it('a system that calls scheduler.add during run: the new system does NOT run this frame', () => {
+    const calls: string[] = [];
+    scheduler.add('first', () => {
+      calls.push('first');
+      scheduler.add('second', () => calls.push('second'));
+    });
+    scheduler.run(world, 0.016);
+    // 'second' should not run in this frame despite being added by 'first'
+    expect(calls).toEqual(['first']);
+  });
+
+  it('a system added during run DOES run on the following frame', () => {
+    const calls: string[] = [];
+    let added = false;
+    scheduler.add('first', () => {
+      calls.push('first');
+      if (!added) {
+        scheduler.add('second', () => calls.push('second'));
+        added = true;
+      }
+    });
+    scheduler.run(world, 0.016);
+    calls.length = 0; // Reset for next frame
+    scheduler.run(world, 0.016);
+    // 'second' should run in the second frame
+    expect(calls).toEqual(['first', 'second']);
   });
 });
