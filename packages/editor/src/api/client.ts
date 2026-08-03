@@ -31,7 +31,12 @@ export interface ApiClient {
   putScene(name: string, scene: SceneFile): Promise<void>;
   getAssets(): Promise<AssetSummary[]>;
   scanAssets(): Promise<AssetSummary[]>;
-  putThumbnail(path: string, png: Uint8Array): Promise<void>;
+  /**
+   * `Uint8Array<ArrayBuffer>` rather than a bare `Uint8Array`: a body cannot be
+   * backed by a SharedArrayBuffer, and a rendered thumbnail never is. Saying so
+   * in the signature is more honest than casting at the call site.
+   */
+  putThumbnail(path: string, png: Uint8Array<ArrayBuffer>): Promise<void>;
   build(outDir: string): Promise<BuildSummary>;
 }
 
@@ -122,9 +127,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       await request(`/api/assets/thumbnail?path=${encodeURIComponent(path)}`, {
         method: 'PUT',
         headers: { 'content-type': 'image/png' },
-        // Wrapped in a Blob rather than cast: a Uint8Array backed by a
-        // SharedArrayBuffer is not a valid BodyInit, and the type says so.
-        body: new Blob([png], { type: 'image/png' }),
+        body: png,
       });
     },
     async build(outDir) {
