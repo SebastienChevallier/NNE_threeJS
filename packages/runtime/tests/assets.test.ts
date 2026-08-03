@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Mesh, Object3D } from 'three';
-import { AssetCache, type GltfSource } from '../src/assets.js';
+import { AssetCache, resolveAssetUrl, type GltfSource } from '../src/assets.js';
 
 function sourceOf(make: () => Object3D = () => new Mesh()): GltfSource & { calls: number } {
   const source = {
@@ -82,5 +82,31 @@ describe('AssetCache', () => {
   it('names the failing url when a load rejects', async () => {
     const cache = new AssetCache({ async load() { throw new Error('404'); } });
     await expect(cache.get('missing.glb')).rejects.toThrow(/missing\.glb/);
+  });
+});
+
+describe('resolveAssetUrl', () => {
+  it('returns the path unchanged with no base', () => {
+    expect(resolveAssetUrl('', 'props/PRP_Chair_01.glb')).toBe('props/PRP_Chair_01.glb');
+  });
+
+  it('roots a component path under the editor cache', () => {
+    // The editor serves optimized assets here; without a base the loader would
+    // request the path verbatim and get a 404 for every mesh in the scene.
+    expect(resolveAssetUrl('/cache/assets', 'props/PRP_Chair_01.glb'))
+      .toBe('/cache/assets/props/PRP_Chair_01.glb');
+  });
+
+  it('roots a component path under a build output', () => {
+    expect(resolveAssetUrl('assets', 'props/PRP_Chair_01.glb'))
+      .toBe('assets/props/PRP_Chair_01.glb');
+  });
+
+  it('does not double up separators', () => {
+    expect(resolveAssetUrl('/cache/assets/', '/props/A.glb')).toBe('/cache/assets/props/A.glb');
+  });
+
+  it('handles a base with several trailing slashes', () => {
+    expect(resolveAssetUrl('/cache//', 'A.glb')).toBe('/cache/A.glb');
   });
 });

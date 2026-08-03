@@ -1,6 +1,6 @@
 export { Engine, type EngineOptions, type Viewport } from './engine.js';
 export { SceneGraph } from './scene-graph.js';
-export { AssetCache, createGltfSource, type GltfSource } from './assets.js';
+export { AssetCache, createGltfSource, resolveAssetUrl, type GltfSource } from './assets.js';
 export { createWebGLViewport } from './webgl-viewport.js';
 export { createPlayer, loadSceneIntoWorld, type PlayerOptions } from './player.js';
 export { applyLight, applyTransform, createLight } from './convert.js';

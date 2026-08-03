@@ -44,6 +44,9 @@ export interface EditorController {
   dispose(): void;
 }
 
+/** Where editor-server serves optimized assets from. */
+const ASSET_BASE_URL = '/cache/assets';
+
 export interface ControllerOptions {
   client?: ApiClient;
   /** Called on a problem worth showing the user. */
@@ -62,7 +65,10 @@ export function createController(options: ControllerOptions = {}): EditorControl
   const client = options.client ?? createApiClient();
   const session = new EditorSession();
   const store = createEditorStore(session);
-  const assets = new AssetCache(createGltfSource());
+  // The editor loads from the server's optimized cache, never from the raw
+  // sources: a Mesh component stores a project-relative path, and this is what
+  // says where that path is rooted. Without it every mesh in the scene 404s.
+  const assets = new AssetCache(createGltfSource(ASSET_BASE_URL));
   let dragged: AssetSummary | undefined;
   let disconnect: (() => void) | undefined;
   let sceneView: SceneView | undefined;

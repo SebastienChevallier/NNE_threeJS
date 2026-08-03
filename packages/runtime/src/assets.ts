@@ -49,12 +49,29 @@ export class AssetCache {
   }
 }
 
-/** Browser-side adapter. Not unit tested: it needs a real network and DOM. */
-export function createGltfSource(): GltfSource {
+/**
+ * Joins a base URL and a component's asset path.
+ *
+ * A `Mesh` component stores a project-relative path such as
+ * "props/PRP_Chair_01.glb", never a URL — the scene file has to stay portable
+ * between the editor, which serves optimized assets under `/cache/assets/`,
+ * and a build, which lays them out under `assets/`. Whoever builds the loader
+ * knows which of the two it is; the scene must not.
+ */
+export function resolveAssetUrl(baseUrl: string, path: string): string {
+  if (baseUrl === '') return path;
+  return `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+}
+
+/**
+ * Browser-side adapter. Not unit tested: it needs a real network and DOM.
+ * `baseUrl` is where the optimized assets are actually served from.
+ */
+export function createGltfSource(baseUrl = ''): GltfSource {
   const loader = new GLTFLoader();
   return {
-    async load(url: string): Promise<Object3D> {
-      const gltf = await loader.loadAsync(url);
+    async load(path: string): Promise<Object3D> {
+      const gltf = await loader.loadAsync(resolveAssetUrl(baseUrl, path));
       return gltf.scene;
     },
   };

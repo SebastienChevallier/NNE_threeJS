@@ -26,6 +26,13 @@ export interface PlayerOptions {
   canvas: HTMLCanvasElement;
   sceneUrl: string;
   fetchJson?: (url: string) => Promise<unknown>;
+  /**
+   * Where the optimized assets are served from. Defaults to what `build`
+   * produces: an `assets/` folder next to index.html. A `Mesh` component
+   * stores a project-relative path, not a URL, so something has to say where
+   * that path is rooted.
+   */
+  assetBaseUrl?: string;
   /** Injectable so the one GPU-bound dependency can be faked in tests. */
   createViewport?: (canvas: HTMLCanvasElement) => Viewport;
 }
@@ -52,7 +59,8 @@ export async function createPlayer(options: PlayerOptions): Promise<Engine> {
 
   const viewport = (options.createViewport ?? createWebGLViewport)(options.canvas);
   try {
-    const engine = new Engine({ world, assets: new AssetCache(createGltfSource()), viewport });
+    const assets = new AssetCache(createGltfSource(options.assetBaseUrl ?? 'assets'));
+    const engine = new Engine({ world, assets, viewport });
     engine.resize(options.canvas.clientWidth, options.canvas.clientHeight);
     engine.start();
     return engine;
