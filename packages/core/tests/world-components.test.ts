@@ -67,4 +67,48 @@ describe('World components', () => {
   it('throws when setting on a dead entity', () => {
     expect(() => world.set(99, 'Mesh', {})).toThrow(/unknown entity 99/);
   });
+
+  it('drops components from nested children when ancestor is despawned', () => {
+    const parent = e;
+    const child = world.spawn('child', parent);
+    const grandchild = world.spawn('grandchild', child);
+
+    world.set(child, 'Mesh', { asset: 'child.glb' });
+    world.set(grandchild, 'Mesh', { asset: 'grand.glb' });
+
+    // Confirm components are set before despawn
+    expect(world.has(child, 'Mesh')).toBe(true);
+    expect(world.has(grandchild, 'Mesh')).toBe(true);
+
+    // Despawn the parent (entire subtree)
+    world.despawn(parent);
+
+    // Resurrect child and grandchild by id and verify no stale components
+    world.spawnWithId(child, 'child-reborn', null);
+    world.spawnWithId(grandchild, 'grandchild-reborn', null);
+    expect(world.has(child, 'Mesh')).toBe(false);
+    expect(world.has(grandchild, 'Mesh')).toBe(false);
+  });
+
+  it('returns a defensive copy from componentsOf', () => {
+    world.set(e, 'Transform', { position: [1, 2, 3] });
+    world.set(e, 'Mesh', { asset: 'test.glb' });
+
+    const components = world.componentsOf(e) as {
+      Transform?: { position: number[] };
+      Mesh?: { asset: string };
+    };
+
+    // Mutate the returned object
+    if (components.Transform) {
+      components.Transform.position[0] = 99;
+    }
+    if (components.Mesh) {
+      components.Mesh.asset = 'mutated.glb';
+    }
+
+    // Verify world state is unchanged
+    expect(world.get(e, 'Transform')).toEqual({ position: [1, 2, 3] });
+    expect(world.get(e, 'Mesh')).toEqual({ asset: 'test.glb' });
+  });
 });
