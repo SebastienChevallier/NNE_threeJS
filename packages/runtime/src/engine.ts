@@ -41,6 +41,7 @@ export class Engine {
   private readonly cancel: (handle: number) => void;
 
   private handle: number | undefined;
+  private running = false;
   private lastTime = 0;
   private width = 1;
   private height = 1;
@@ -50,6 +51,7 @@ export class Engine {
     this.assets = options.assets;
     this.viewport = options.viewport;
     this.now = options.now ?? (() => performance.now());
+    // Browser defaults: start() requires a DOM host or an injected scheduler.
     this.schedule = options.schedule ?? ((cb) => requestAnimationFrame(cb));
     this.cancel = options.cancel ?? ((h) => cancelAnimationFrame(h));
 
@@ -88,27 +90,37 @@ export class Engine {
   }
 
   resize(width: number, height: number): void {
-    this.width = width;
-    this.height = height;
+    // A hidden or collapsed container reports 0, which would make aspect
+    // NaN/Infinity and poison the projection matrix. The viewport still gets
+    // the raw values: a renderer may legitimately care that it is size zero.
+    this.width = Math.max(1, width);
+    this.height = Math.max(1, height);
     this.viewport?.resize(width, height);
     const camera = this.camera.active();
     if (camera) this.applyAspect(camera);
   }
 
   start(): void {
-    if (this.handle !== undefined) return;
+    if (this.running) return;
+    this.running = true;
     this.lastTime = this.now();
     const frame = (): void => {
       const time = this.now();
       const dt = Math.min((time - this.lastTime) / 1000, MAX_DELTA_SECONDS);
       this.lastTime = time;
+      this.handle = undefined;
       this.step(dt);
+      // A system may have called stop()/dispose() during step(); scheduling
+      // another frame here would silently resurrect the loop.
+      if (!this.running) return;
       this.handle = this.schedule(frame);
     };
     this.handle = this.schedule(frame);
   }
 
   stop(): void {
+    if (!this.running) return;
+    this.running = false;
     if (this.handle === undefined) return;
     this.cancel(this.handle);
     this.handle = undefined;

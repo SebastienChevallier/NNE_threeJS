@@ -101,6 +101,55 @@ describe('Engine', () => {
     expect(pending).toBeUndefined();
   });
 
+  it('does not reschedule when a system calls stop() during the step', () => {
+    let pending: (() => void) | undefined;
+    let scheduled = 0;
+    const engine = new Engine({
+      world, assets: assets(),
+      now: () => 0,
+      schedule: (cb) => { pending = cb; scheduled += 1; return scheduled; },
+      cancel: () => { pending = undefined; },
+    });
+    engine.scheduler.add('suicide', () => { engine.stop(); });
+    engine.start();
+    const frame = pending;
+    pending = undefined;               // the frame has fired, nothing is queued
+    frame?.();
+    expect(pending).toBeUndefined();
+    expect(scheduled).toBe(1);
+  });
+
+  it('does not reschedule when a system calls dispose() during the step', () => {
+    const viewport = fakeViewport();
+    let pending: (() => void) | undefined;
+    let scheduled = 0;
+    const engine = new Engine({
+      world, assets: assets(), viewport,
+      now: () => 0,
+      schedule: (cb) => { pending = cb; scheduled += 1; return scheduled; },
+      cancel: () => { pending = undefined; },
+    });
+    engine.scheduler.add('suicide', () => { engine.dispose(); });
+    engine.start();
+    const frame = pending;
+    pending = undefined;
+    frame?.();
+    expect(pending).toBeUndefined();
+    expect(scheduled).toBe(1);
+    expect(viewport.disposed).toBe(true);
+  });
+
+  it('keeps the aspect finite when the container has zero size', () => {
+    const engine = new Engine({ world, assets: assets() });
+    const cam = world.spawn('Cam');
+    world.set(cam, CAMERA, { fov: 60, near: 0.1, far: 1000, active: true });
+    engine.resize(0, 0);
+    engine.step(0.016);
+    expect(Number.isFinite(engine.activeCamera()?.aspect ?? NaN)).toBe(true);
+    engine.resize(800, 400);
+    expect(engine.activeCamera()?.aspect).toBe(2);
+  });
+
   it('clamps a long frame so physics-free logic does not jump', () => {
     let pending: (() => void) | undefined;
     let time = 0;
