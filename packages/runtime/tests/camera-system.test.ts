@@ -76,6 +76,24 @@ describe('camera system', () => {
     expect(system.active()).toBe(graph.objectOf(first));
   });
 
+  it('drops the camera when the component is removed', () => {
+    const e = world.spawn('Cam');
+    world.set(e, CAMERA, camera);
+    graph.sync(world);
+    system(world, 0.016);
+    const created = graph.objectOf(e) as PerspectiveCamera;
+
+    world.remove(e, CAMERA);
+    system(world, 0.016);
+
+    expect(system.active()).toBeUndefined();
+    expect(created.parent).toBeNull();
+    expect(graph.objectOf(e)).toBeUndefined();
+
+    graph.sync(world);
+    expect(graph.objectOf(e)).not.toBeInstanceOf(PerspectiveCamera);
+  });
+
   it('drops the active camera when its entity is despawned', () => {
     const e = world.spawn('Cam');
     world.set(e, CAMERA, camera);

@@ -17,7 +17,7 @@ export function createCameraSystem(graph: SceneGraph): CameraSystem {
   const cameras = new Map<EntityId, PerspectiveCamera>();
   let activeEntity: EntityId | undefined;
 
-  const system = ((world: World) => {
+  const system: CameraSystem = Object.assign((world: World) => {
     activeEntity = undefined;
 
     for (const entity of world.query(CAMERA)) {
@@ -41,13 +41,17 @@ export function createCameraSystem(graph: SceneGraph): CameraSystem {
       }
     }
 
-    for (const entity of [...cameras.keys()]) {
-      if (!world.alive(entity)) cameras.delete(entity);
+    // Deleting from a Map while iterating its own keys is well-defined in JS.
+    for (const [entity, camera] of cameras) {
+      // An entity can lose its Camera component while staying alive: it drops
+      // out of the query, so the camera must not linger in the graph either.
+      if (world.alive(entity) && world.has(entity, CAMERA)) continue;
+      if (graph.objectOf(entity) === camera) graph.detach(entity);
+      cameras.delete(entity);
     }
-  }) as unknown as CameraSystem;
-
-  system.active = () =>
-    (activeEntity === undefined ? undefined : cameras.get(activeEntity));
+  }, {
+    active: () => (activeEntity === undefined ? undefined : cameras.get(activeEntity)),
+  });
 
   return system;
 }

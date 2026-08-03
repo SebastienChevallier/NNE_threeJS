@@ -94,6 +94,24 @@ describe('SceneGraph', () => {
     expect(replacement.parent).toBe(graph.objectOf(parent));
   });
 
+  it('attach parents the replacement immediately, without another sync', () => {
+    const parent = world.spawn('P');
+    const child = world.spawn('C', parent);
+    graph.sync(world);
+    const replacement = new Object3D();
+    graph.attach(child, replacement);
+    expect(replacement.parent).toBe(graph.objectOf(parent));
+  });
+
+  it('attach parents a root replacement under the graph root immediately', () => {
+    const a = world.spawn('A');
+    graph.sync(world);
+    const replacement = new Object3D();
+    graph.attach(a, replacement);
+    expect(replacement.parent).toBe(root);
+    expect(root.children).toEqual([replacement]);
+  });
+
   it('detach removes an object from the graph and its parent', () => {
     const a = world.spawn('A');
     graph.sync(world);

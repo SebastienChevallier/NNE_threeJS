@@ -24,9 +24,14 @@ export class SceneGraph {
   attach(entity: EntityId, object: Object3D): void {
     const previous = this.objects.get(entity);
     if (previous) {
+      // Take over the previous object's place in the tree straight away: `sync`
+      // only reparents once per frame, and an object attached mid-frame would
+      // otherwise render orphaned (invisible, or ignoring its parent chain).
+      const parent = previous.parent;
       previous.removeFromParent();
       // Carry the children over, so a loaded asset does not orphan child entities.
       for (const child of [...previous.children]) object.add(child);
+      if (parent) parent.add(object);
     }
     object.userData.entity = entity;
     this.objects.set(entity, object);

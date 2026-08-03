@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DirectionalLight, Object3D, PointLight } from 'three';
 import { LIGHT, World } from '@nne/core';
 import { SceneGraph } from '../src/scene-graph.js';
@@ -55,6 +55,65 @@ describe('light system', () => {
     world.set(e, LIGHT, { ...light, type: 'point' });
     system(world, 0.016);
     expect(graph.objectOf(e)).toBeInstanceOf(PointLight);
+  });
+
+  it('disposes the old light when the type changes', () => {
+    const e = world.spawn('L');
+    world.set(e, LIGHT, light);
+    graph.sync(world);
+    system(world, 0.016);
+    const first = graph.objectOf(e) as DirectionalLight;
+    const disposed = vi.spyOn(first, 'dispose');
+    world.set(e, LIGHT, { ...light, type: 'point' });
+    system(world, 0.016);
+    expect(disposed).toHaveBeenCalledOnce();
+  });
+
+  it('disposes and drops the light when the entity is despawned', () => {
+    const e = world.spawn('L');
+    world.set(e, LIGHT, light);
+    graph.sync(world);
+    system(world, 0.016);
+    const created = graph.objectOf(e) as DirectionalLight;
+    const disposed = vi.spyOn(created, 'dispose');
+    world.despawn(e);
+    system(world, 0.016);
+    expect(disposed).toHaveBeenCalledOnce();
+  });
+
+  it('disposes and unlights the entity when the component is removed', () => {
+    const e = world.spawn('L');
+    world.set(e, LIGHT, light);
+    graph.sync(world);
+    system(world, 0.016);
+    const created = graph.objectOf(e) as DirectionalLight;
+    const disposed = vi.spyOn(created, 'dispose');
+
+    world.remove(e, LIGHT);
+    system(world, 0.016);
+
+    expect(disposed).toHaveBeenCalledOnce();
+    expect(created.parent).toBeNull();
+    expect(graph.objectOf(e)).toBeUndefined();
+
+    // The next sync gives the still-live entity a plain placeholder back.
+    graph.sync(world);
+    const placeholder = graph.objectOf(e);
+    expect(placeholder).toBeInstanceOf(Object3D);
+    expect(placeholder).not.toBeInstanceOf(DirectionalLight);
+  });
+
+  it('recreates a light when the component comes back', () => {
+    const e = world.spawn('L');
+    world.set(e, LIGHT, light);
+    graph.sync(world);
+    system(world, 0.016);
+    world.remove(e, LIGHT);
+    system(world, 0.016);
+    graph.sync(world);
+    world.set(e, LIGHT, light);
+    system(world, 0.016);
+    expect(graph.objectOf(e)).toBeInstanceOf(DirectionalLight);
   });
 
   it('ignores entities the graph does not track', () => {
