@@ -89,7 +89,7 @@ export class ComponentRegistry {
 
     for (const [field, spec] of Object.entries(schema)) {
       const path = `${type}.${field}`;
-      if (!(field in record)) {
+      if (!Object.hasOwn(record, field)) {
         errors.push({ path, message: 'missing field' });
         continue;
       }
@@ -97,7 +97,7 @@ export class ComponentRegistry {
       if (message) errors.push({ path, message });
     }
     for (const field of Object.keys(record)) {
-      if (!(field in schema)) {
+      if (!Object.hasOwn(schema, field)) {
         errors.push({ path: `${type}.${field}`, message: 'unknown field' });
       }
     }

@@ -103,4 +103,51 @@ describe('ComponentRegistry.validate', () => {
   it('collects several errors at once', () => {
     expect(registry.validate('Sample', { ...valid, num: 'x', flag: 'y' })).toHaveLength(2);
   });
+
+  it('reports constructor field as unknown field', () => {
+    expect(registry.validate('Sample', { ...valid, constructor: 42 })).toContainEqual({
+      path: 'Sample.constructor', message: 'unknown field',
+    });
+  });
+
+  it('reports toString field as unknown field', () => {
+    expect(registry.validate('Sample', { ...valid, toString: 42 })).toContainEqual({
+      path: 'Sample.toString', message: 'unknown field',
+    });
+  });
+
+  it('rejects a non-string string field', () => {
+    expect(registry.validate('Sample', { ...valid, label: 42 })).toContainEqual({
+      path: 'Sample.label', message: 'expected a string',
+    });
+  });
+
+  it('rejects a malformed euler', () => {
+    expect(registry.validate('Sample', { ...valid, rotation: [1, 2, 'x'] })).toContainEqual({
+      path: 'Sample.rotation', message: 'expected an array of 3 finite numbers',
+    });
+  });
+
+  it('rejects a non-string asset', () => {
+    expect(registry.validate('Sample', { ...valid, asset: 42 })).toContainEqual({
+      path: 'Sample.asset', message: 'expected an asset path or null',
+    });
+  });
+
+  describe('prototype field collisions', () => {
+    let registryWithProtoField: ComponentRegistry;
+    beforeEach(() => {
+      registryWithProtoField = new ComponentRegistry();
+      registryWithProtoField.define('WithToString', {
+        toString: { type: 'string' as const, default: 'test' },
+        value: { type: 'number' as const, default: 0 },
+      });
+    });
+
+    it('reports missing toString field when it is omitted', () => {
+      expect(registryWithProtoField.validate('WithToString', { value: 5 })).toContainEqual({
+        path: 'WithToString.toString', message: 'missing field',
+      });
+    });
+  });
 });
