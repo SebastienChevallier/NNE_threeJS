@@ -135,6 +135,23 @@ export class World {
     return data === undefined ? undefined : structuredClone(data);
   }
 
+  /**
+   * Reads a component without cloning it.
+   *
+   * `get()` deep-clones on every call, which cost ~8.7ms/frame for 2000
+   * entities in profiling — over half of a 60fps frame budget. `peek()`
+   * skips that clone for per-frame render systems that only read the value
+   * and never hold onto it across a `set()`.
+   *
+   * The returned reference aliases internal storage: mutating it corrupts
+   * world state, and it becomes stale after the next `set()` on the same
+   * entity/type. Prefer `get()` unless you are in a hot per-frame loop.
+   */
+  peek(entity: EntityId, type: ComponentType): Readonly<ComponentData> | undefined {
+    this.assertAlive(entity);
+    return this.stores.get(type)?.get(entity);
+  }
+
   has(entity: EntityId, type: ComponentType): boolean {
     this.assertAlive(entity);
     return this.stores.get(type)?.has(entity) ?? false;
