@@ -38,7 +38,18 @@ export class ComponentRegistry {
         }
       }
     }
+    this.freezeSchema(schema);
     this.schemas.set(type, schema);
+  }
+
+  private freezeSchema(schema: ComponentSchema): void {
+    for (const spec of Object.values(schema)) {
+      if (spec.options) {
+        Object.freeze(spec.options);
+      }
+      Object.freeze(spec);
+    }
+    Object.freeze(schema);
   }
 
   get(type: ComponentType): ComponentSchema | undefined {

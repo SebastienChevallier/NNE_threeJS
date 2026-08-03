@@ -68,4 +68,50 @@ describe('ComponentRegistry', () => {
   it('throws when building defaults for an unknown type', () => {
     expect(() => registry.createDefault('Nope')).toThrow(/unknown component type "Nope"/);
   });
+
+  it('freezes the schema to prevent mutation', () => {
+    registry.define('Mesh', { asset: { type: 'asset', default: null, accept: '.glb' } });
+    const schema = registry.get('Mesh');
+    expect(Object.isFrozen(schema)).toBe(true);
+  });
+
+  it('prevents mutation of field default values via get()', () => {
+    registry.define('Mesh', { asset: { type: 'asset', default: null, accept: '.glb' } });
+    const schema = registry.get('Mesh')! as Record<string, any>;
+    expect(() => {
+      // In strict mode (ESM), this should throw when trying to modify a frozen object
+      schema.asset.default = 'mutated';
+    }).toThrow();
+    // Verify the registry's createDefault is unaffected
+    expect(registry.createDefault('Mesh')).toEqual({ asset: null });
+  });
+
+  it('prevents mutation of enum options via get()', () => {
+    registry.define('Bad', { kind: { type: 'enum', default: 'a', options: ['a', 'b'] } });
+    const schema = registry.get('Bad')! as Record<string, any>;
+    expect(() => {
+      schema.kind.options.push('c');
+    }).toThrow();
+    // Verify the registry is unaffected
+    const schema2 = registry.get('Bad')! as Record<string, any>;
+    expect(schema2.kind.options).toEqual(['a', 'b']);
+  });
+
+  it('refuses an enum field with empty options array', () => {
+    expect(() =>
+      registry.define('Bad', { kind: { type: 'enum', default: 'a', options: [] } }),
+    ).toThrow(/enum field "kind" needs options/);
+  });
+
+  it('preserves schema field order', () => {
+    registry.define('Ordered', {
+      zulu: { type: 'string', default: 'z' },
+      alpha: { type: 'string', default: 'a' },
+      mike: { type: 'string', default: 'm' },
+    });
+    const schema = registry.get('Ordered');
+    expect(Object.keys(schema!)).toEqual(['zulu', 'alpha', 'mike']);
+    const defaults = registry.createDefault('Ordered');
+    expect(Object.keys(defaults)).toEqual(['zulu', 'alpha', 'mike']);
+  });
 });
