@@ -375,13 +375,15 @@ Attendu : tout passe.
 
 - [ ] **Step 4: Vérifier le garde par mutation**
 
-Casser volontairement `containedJoin` et vérifier qu'un test vire au rouge à chaque fois :
+Casser volontairement `containedJoin`, une mutation à la fois, en restaurant entre chaque :
 
-1. Remplacer `!target.startsWith(root + sep)` par `!target.startsWith(root)` → le test « climbs out and back in under another name » doit échouer.
-2. Retirer la garde `isAbsolute` → le test « rejects an absolute path » doit échouer.
-3. Retirer la garde sur `..` → le test « only re-enters after leaving » doit échouer.
+1. Remplacer `!target.startsWith(root + sep)` par `!target.startsWith(root)`.
+2. Retirer la garde `isAbsolute`.
+3. Retirer la garde sur `..`.
 
-Restaurer le code après chaque mutation. Une mutation qui ne casse aucun test signale un test manquant, pas une mutation inutile.
+**Résultat attendu : seule la mutation 3 vire au rouge**, et c'est le bon résultat, pas un test manquant. Les trois gardes sont volontairement redondants, et le rejet de `..` rend les deux autres inatteignables : aucun chemin sans `..` ne peut sortir de la base par résolution, et un chemin absolu est déjà rattrapé par le test de confinement. Les deux gardes restent parce qu'ils échouent indépendamment — le jour où quelqu'un assouplit la règle sur `..` pour autoriser un chemin relatif légitime, ils sont ce qui empêche la fonction de devenir correcte par accident d'ordonnancement.
+
+Le noter ici plutôt que de fabriquer un test artificiel : la redondance sur une frontière de sécurité est un choix, et un choix se documente.
 
 - [ ] **Step 5: Commit**
 
