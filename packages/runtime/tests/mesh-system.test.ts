@@ -148,6 +148,102 @@ describe('mesh system', () => {
     expect(graph.objectOf(e)).toBeInstanceOf(Mesh);
   });
 
+  it('applies castShadow when it changes after the load has finished', async () => {
+    const e = world.spawn('A');
+    world.set(e, MESH, { asset: 'a.glb', castShadow: true });
+    graph.sync(world);
+    system(world, 0.016);
+    await source.flush();
+
+    // Same url, so the reload guard skips the entity — but the component is
+    // still the source of truth and the object must follow it.
+    world.set(e, MESH, { asset: 'a.glb', castShadow: false });
+    system(world, 0.016);
+    expect(graph.objectOf(e)?.castShadow).toBe(false);
+    expect(source.calls).toBe(1);
+  });
+
+  it('drops the loaded object when the Mesh component is removed', async () => {
+    const e = world.spawn('A');
+    world.set(e, MESH, { asset: 'a.glb', castShadow: true });
+    graph.sync(world);
+    system(world, 0.016);
+    await source.flush();
+    expect(graph.objectOf(e)).toBeInstanceOf(Mesh);
+
+    world.remove(e, MESH);
+    system(world, 0.016);
+    expect(graph.objectOf(e)).toBeUndefined();
+
+    // The entity is still alive, so `sync` gives it a plain placeholder back.
+    graph.sync(world);
+    expect(graph.objectOf(e)).toBeInstanceOf(Object3D);
+    expect(graph.objectOf(e)).not.toBeInstanceOf(Mesh);
+  });
+
+  it('drops the loaded object when the asset goes back to null', async () => {
+    const e = world.spawn('A');
+    world.set(e, MESH, { asset: 'a.glb', castShadow: true });
+    graph.sync(world);
+    system(world, 0.016);
+    await source.flush();
+
+    world.set(e, MESH, { asset: null, castShadow: true });
+    system(world, 0.016);
+    expect(graph.objectOf(e)).toBeUndefined();
+  });
+
+  it('reloads the asset when a removed Mesh component comes back', async () => {
+    const e = world.spawn('A');
+    world.set(e, MESH, { asset: 'a.glb', castShadow: true });
+    graph.sync(world);
+    system(world, 0.016);
+    await source.flush();
+
+    world.remove(e, MESH);
+    system(world, 0.016);
+    graph.sync(world);
+
+    // Same url as before: without clearing the resolved entry, the guard would
+    // swallow this tick and the entity would stay meshless forever. The load
+    // itself is served from the AssetCache, so the source is not hit again.
+    world.set(e, MESH, { asset: 'a.glb', castShadow: true });
+    system(world, 0.016);
+    await source.flush();
+    expect(graph.objectOf(e)).toBeInstanceOf(Mesh);
+    expect(source.calls).toBe(1);
+  });
+
+  it('leaves an object another system owns alone when the Mesh component goes', async () => {
+    const e = world.spawn('A');
+    world.set(e, MESH, { asset: 'a.glb', castShadow: true });
+    graph.sync(world);
+    system(world, 0.016);
+    await source.flush();
+
+    // Something else — the camera or light system — took the entity over.
+    const owned = new Object3D();
+    graph.attach(e, owned);
+
+    world.remove(e, MESH);
+    system(world, 0.016);
+    expect(graph.objectOf(e)).toBe(owned);
+  });
+
+  it('attaches nothing when the component is removed mid-load', async () => {
+    const e = world.spawn('A');
+    world.set(e, MESH, { asset: 'a.glb', castShadow: true });
+    graph.sync(world);
+    system(world, 0.016);
+
+    world.remove(e, MESH);
+    system(world, 0.016);
+    await source.flush();
+
+    graph.sync(world);
+    expect(graph.objectOf(e)).not.toBeInstanceOf(Mesh);
+  });
+
   it('keeps child entities attached when the asset replaces the placeholder', async () => {
     const parent = world.spawn('P');
     const child = world.spawn('C', parent);
