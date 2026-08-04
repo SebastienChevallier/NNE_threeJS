@@ -2,3 +2,8 @@ node_modules/
 dist/
 .cache/
 *.tsbuildinfo
+
+# Project data (created by `pnpm run start`, including the demo project it
+# scaffolds on first launch). Generated/user content, not engine source — like
+# .cache/ and dist/, not meant to be committed to this repo by default.
+/projects/

@@ -4,15 +4,16 @@ Moteur de jeu maison en TypeScript, rendu par Three.js, avec un éditeur visuel.
 L'architecture est orientée composants : une scène est un fichier JSON décrivant
 des entités et leurs composants, pas du code impératif.
 
-**État : les quatre packages de la V1 sont implémentés** — 699 tests, typecheck
-propre. Il reste un point de câblage avant de pouvoir lancer l'éditeur, voir
+**État : les quatre packages de la V1 sont implémentés** — 718 tests, typecheck
+propre. Double-clique sur `lancer-editeur.bat` (Windows) ou
+`lancer-editeur.command` (macOS/Linux) pour tout installer et démarrer, voir
 [Lancer l'éditeur](#lancer-léditeur).
 
 | Package | Contenu | Tests |
 |---|---|---|
 | `core` | ECS, registre de schémas, scènes, ordonnanceur, commandes | 197 |
 | `runtime` | Systèmes Three.js, boucle de jeu, player standalone | 114 |
-| `editor-server` | Serveur Node local : disque, import gltf-transform, watch, build | 154 |
+| `editor-server` | Serveur Node local : disque, import gltf-transform, watch, build | 173 |
 | `editor` | React : Scene View + gizmos, Game View, Hierarchy, Inspector, Assets | 234 |
 
 ## Prérequis
@@ -48,19 +49,45 @@ cd packages/core && npx vitest run tests/inversion.test.ts
 
 ## Lancer l'éditeur
 
-⚠️ **Pas encore possible en une commande.** Le spec prévoit un `pnpm editor` qui
-démarre le serveur d'édition et sert l'app React ; `startEditorServer()` existe et
-est testé, mais **aucun point d'entrée exécutable ne l'appelle** et il n'y a pas de
-script racine. Le blocage est mécanique : les imports du dépôt portent l'extension
-`.js` (résolution *bundler*), que Vitest et Vite résolvent vers les `.ts` mais que
-Node seul ne résout pas. Le combler demande soit un lanceur TypeScript (`tsx`), soit
-une étape de build — un choix de dépendance délibérément laissé ouvert.
+**Le plus simple : double-clique sur un fichier.**
 
-En attendant, `pnpm --filter @nne/editor dev` démarre bien Vite, qui proxie `/api`
-et `/cache` vers `127.0.0.1:5174` — mais rien n'écoute sur ce port tant que le
-serveur d'édition n'est pas lancé, donc les panneaux resteront vides.
+- **Windows** — `lancer-editeur.bat`
+- **macOS** — `lancer-editeur.command` (au premier lancement, clic droit → Ouvrir,
+  pour passer la protection Gatekeeper sur un fichier non signé)
+- **Linux** — `./lancer-editeur.sh` depuis un terminal, ou double-clic selon
+  l'environnement de bureau
 
-Le serveur s'utilise en revanche parfaitement depuis du code :
+Chacun installe les dépendances (`pnpm install`) puis démarre le serveur d'édition
+et l'éditeur, et ouvre `http://127.0.0.1:5173` dans le navigateur par défaut dès
+que les deux répondent. La fenêtre du terminal doit rester ouverte : Ctrl+C
+l'arrête. Seul prérequis : **Node.js ≥ 22** et **pnpm** (`npm install -g pnpm`) —
+les lanceurs le signalent clairement s'il manque plutôt que d'échouer en silence.
+
+Au premier lancement, un projet de démonstration est créé dans `projects/demo/`
+(une caméra, une lumière, une scène de départ) — c'est ce qui évite d'ouvrir un
+éditeur vide sur rien. `projects/` n'est pas suivi par git : ce sont des données de
+projet, pas du code du moteur.
+
+Depuis un terminal, l'équivalent est `pnpm run start` à la racine. Deux variantes
+plus fines :
+
+| Commande | Effet |
+|---|---|
+| `pnpm run start` | Installe, démarre serveur + éditeur, ouvre le navigateur |
+| `pnpm run editor` | Démarre serveur + éditeur, sans réinstaller ni ouvrir le navigateur |
+| `pnpm --filter @nne/editor-server start` | Le serveur d'édition seul, sur `--port` et `--host` au choix |
+
+Le serveur accepte un dossier de projet en argument positionnel :
+
+```bash
+pnpm --filter @nne/editor-server start projects/mon-jeu --port 6000
+```
+
+Il écoute sur `127.0.0.1` par défaut — il n'a pas d'authentification, donc
+l'exposer au-delà du loopback (`--host 0.0.0.0`) est un choix explicite, jamais le
+défaut.
+
+Le serveur s'utilise aussi directement depuis du code :
 
 ```ts
 import { startEditorServer } from '@nne/editor-server';

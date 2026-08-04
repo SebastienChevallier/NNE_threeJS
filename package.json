@@ -2,14 +2,23 @@
   "name": "nne-engine",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "editor": "concurrently -n server,web -c blue,green --kill-others-on-fail \"pnpm --filter @nne/editor-server start\" \"pnpm --filter @nne/editor dev\"",
+    "editor:open": "node scripts/open-when-ready.mjs",
+    "start": "pnpm install && concurrently -n server,web,open -c blue,green,magenta --kill-others-on-fail \"pnpm --filter @nne/editor-server start\" \"pnpm --filter @nne/editor dev\" \"pnpm run editor:open\""
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "concurrently": "^10.0.4",
+    "open": "^11.0.0",
+    "tsx": "^4.23.5",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0",
-    "@types/node": "^22.0.0"
+    "wait-on": "^9.1.0"
   }
 }
